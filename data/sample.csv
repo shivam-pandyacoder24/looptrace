@@ -1,0 +1,46 @@
+from,to,amount,time_hours
+# --- normal activity: salaries, rent, shopping (money flows one way) ---
+Acme Technologies,Arjun Rao,42000,0
+Acme Technologies,Priya Nair,42000,0
+Acme Technologies,Rahul Verma,38000,0
+Acme Technologies,Sneha Iyer,38000,0
+Arjun Rao,Skyline Rentals,15000,2
+Priya Nair,Skyline Rentals,15000,3
+Rahul Verma,Skyline Rentals,12000,4
+Sneha Iyer,Skyline Rentals,12000,4
+Arjun Rao,FreshMart,3200,26
+Priya Nair,FreshMart,2750,31
+Rahul Verma,FreshMart,1980,49
+Sneha Iyer,FreshMart,2410,55
+Arjun Rao,Metro Electricity,1450,72
+Priya Nair,Metro Electricity,1620,74
+Skyline Rentals,Metro Electricity,9800,96
+FreshMart,Green Farm Co,18500,60
+# --- innocent loops ---
+Rahul Verma,Sneha Iyer,500,30
+Sneha Iyer,Rahul Verma,450,80
+Arjun Rao,Priya Nair,800,10
+Priya Nair,Arjun Rao,800,160
+City Grocers,Green Farm Co,8000,3
+Green Farm Co,Tractor Supply,5000,40
+Tractor Supply,City Grocers,300,20
+# --- laundering ring 1: 4 hops in 17 hours, ~3% skimmed per hop ---
+Anon Cash Deposit,Orion Imports,50000,8
+Orion Imports,Kestrel Holdings,50000,10
+Kestrel Holdings,Vantage Consulting,48500,14
+Vantage Consulting,Mira Traders,47200,20
+Mira Traders,Orion Imports,45800,27
+Mira Traders,Luxe Motors,1200,29
+# --- laundering ring 2: 5 hops over 40 hours ---
+Blue Harbor LLC,J Fernandes,32000,30
+J Fernandes,Summit Freight,31000,41
+Summit Freight,Delta Exports,30400,52
+Delta Exports,Nova Ventures,29500,60
+Nova Ventures,Blue Harbor LLC,28900,70
+Summit Freight,Metro Electricity,2100,90
+# --- fast, large round trip ---
+Crest Capital,Pine Street Trust,40000,100
+Pine Street Trust,Crest Capital,39600,106
+# --- the two rings share an account: extra loop through Kestrel ---
+Delta Exports,Kestrel Holdings,12000,130
+Kestrel Holdings,Blue Harbor LLC,11500,134

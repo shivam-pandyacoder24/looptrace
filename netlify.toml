@@ -1,0 +1,3 @@
+# Netlify: serve the prebuilt site in docs/. No build step is needed.
+[build]
+  publish = "docs"

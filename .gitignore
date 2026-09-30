@@ -1,0 +1,16 @@
+# native binaries (rebuild with `make`)
+looptrace
+gen_data
+test_fraud
+*.exe
+*.o
+*.out
+
+# generated test data
+big.csv
+
+# editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

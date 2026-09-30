@@ -1,0 +1,1167 @@
+<title>LoopTrace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: an investigator's workbench. Controls on top, the transfer network
+   as graph paper on the left, the "case file" of detected loops on the right,
+   explanation and source code below in tabs. */
+:root {
+  --bg: #edf0f4;
+  --surface: #ffffff;
+  --surface-2: #f5f7fa;
+  --ink: #131b27;
+  --ink-2: #4a5567;
+  --ink-3: #7a8494;
+  --line: #d6dce5;
+  --grid: #d9dfe8;
+  --accent: #2a45b8;
+  --accent-soft: #e4e9fb;
+  --on-accent: #ffffff;
+  --high: #c2361d;
+  --high-soft: #fbe6e1;
+  --medium: #a3650a;
+  --medium-soft: #fbefd8;
+  --low: #5b6b80;
+  --low-soft: #e7ecf2;
+  --on-risk: #ffffff;
+  --edge: #a4aebd;
+  --node: #9aa4b3;
+  --hull: rgba(42, 69, 184, 0.055);
+  --hull-line: rgba(42, 69, 184, 0.38);
+  --shadow: 0 1px 2px rgba(19, 27, 39, 0.06), 0 8px 24px -12px rgba(19, 27, 39, 0.18);
+
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1219; --surface: #141b24; --surface-2: #1a232e; --ink: #e5eaf1; --ink-2: #a3aebd; --ink-3: #737e8e;
+    --line: #29333f; --grid: #1f2833; --accent: #93a8ff; --accent-soft: #1d2647; --on-accent: #0d1219;
+    --high: #ff7b5e; --high-soft: #3a1c16; --medium: #eeb04a; --medium-soft: #352812; --low: #95a4b8; --low-soft: #212a35;
+    --on-risk: #0d1219; --edge: #4b5767; --node: #66717f; --hull: rgba(147, 168, 255, 0.07); --hull-line: rgba(147, 168, 255, 0.42);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1219; --surface: #141b24; --surface-2: #1a232e; --ink: #e5eaf1; --ink-2: #a3aebd; --ink-3: #737e8e;
+  --line: #29333f; --grid: #1f2833; --accent: #93a8ff; --accent-soft: #1d2647; --on-accent: #0d1219;
+  --high: #ff7b5e; --high-soft: #3a1c16; --medium: #eeb04a; --medium-soft: #352812; --low: #95a4b8; --low-soft: #212a35;
+  --on-risk: #0d1219; --edge: #4b5767; --node: #66717f; --hull: rgba(147, 168, 255, 0.07); --hull-line: rgba(147, 168, 255, 0.42);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 15px/1.55 var(--f-body);
+  padding-inline: clamp(16px, 3vw, 36px); padding-block: 0 48px;
+}
+img, svg { max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.mono, code, pre, .num { font-family: var(--f-mono); }
+.num { font-variant-numeric: tabular-nums; }
+.shell { max-width: 1360px; margin-inline: auto; display: grid; gap: 20px; }
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap;
+  padding-block: 18px 14px; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+.brand svg { width: 30px; height: 30px; flex: none; }
+.brand b { font: 800 22px/1 var(--f-display); font-stretch: 125%; letter-spacing: -0.01em; }
+.brand small { display: block; font: 500 12px/1.2 var(--f-body); color: var(--ink-3); margin-top: 3px; letter-spacing: 0.01em; }
+.engine {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); font: 500 12px/1.2 var(--f-mono); color: var(--ink-2);
+}
+.engine i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.engine.fallback i { background: var(--medium); }
+
+/* ---------- intro ---------- */
+.intro { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px 40px; align-items: end; padding-top: 10px; }
+.intro h1 {
+  margin: 0; font: 750 clamp(28px, 4.2vw, 46px)/1.02 var(--f-display); font-stretch: 112%;
+  letter-spacing: -0.02em; text-wrap: balance;
+}
+.intro h1 em { font-style: normal; color: var(--accent); }
+.intro p { margin: 0; color: var(--ink-2); max-width: 62ch; }
+.intro p strong { color: var(--ink); font-weight: 600; }
+
+/* ---------- controls ---------- */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; justify-content: space-between;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px;
+}
+.group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.label { font: 600 11px/1.2 var(--f-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; padding: 3px; }
+.seg button {
+  border: 0; background: transparent; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-weight: 500; font-size: 13.5px; color: var(--ink-2); white-space: nowrap;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgba(0,0,0,.08); }
+.params { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: flex-end; }
+.param { display: grid; gap: 6px; }
+.param .row { display: flex; align-items: center; gap: 10px; }
+.param output { font: 500 13px var(--f-mono); min-width: 44px; color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 120px; accent-color: var(--accent); }
+.money { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; }
+.money span { padding: 0 8px; color: var(--ink-3); font-size: 13px; border-right: 1px solid var(--line); align-self: stretch; display: grid; place-items: center; background: var(--surface-2); }
+.money input { border: 0; width: 96px; padding: 6px 8px; background: transparent; font: 500 13px var(--f-mono); }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13.5px; color: var(--ink-2); user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .track { width: 36px; height: 20px; border-radius: 999px; background: var(--line); position: relative; transition: background .2s; flex: none; }
+.switch .track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .2s; }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(16px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface);
+  padding: 6px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--ink);
+}
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.small { padding: 4px 9px; font-size: 12.5px; }
+.note { font-size: 13px; color: var(--ink-3); }
+
+/* ---------- metrics ---------- */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin: 0; }
+.metric { background: var(--surface); padding: 12px 16px; display: grid; gap: 2px; align-content: start; }
+.metric dt { font: 600 11px/1.3 var(--f-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.metric dd { margin: 0; font: 600 24px/1.2 var(--f-display); font-stretch: 105%; font-variant-numeric: tabular-nums; }
+.metric dd small { font: 400 12.5px/1.4 var(--f-body); color: var(--ink-2); display: block; margin-top: 2px; }
+.dots { display: flex; gap: 10px; font: 500 12.5px var(--f-body); color: var(--ink-2); margin-top: 3px; flex-wrap: wrap; }
+.dots span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+.dots .h::before { background: var(--high); } .dots .m::before { background: var(--medium); } .dots .l::before { background: var(--low); }
+
+/* ---------- workspace ---------- */
+.workspace { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.panel-head h2 { margin: 0; font: 700 15px/1.2 var(--f-display); font-stretch: 110%; letter-spacing: 0.005em; }
+.panel-head .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.board { position: relative; height: 580px; overflow: hidden; border-radius: 0 0 var(--radius) var(--radius);
+  background-color: var(--surface);
+  background-image: radial-gradient(circle, var(--grid) 1.1px, transparent 1.3px);
+  background-size: 22px 22px; }
+.board svg { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.board svg:active { cursor: grabbing; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend .lh { background: var(--high); } .legend .lm { background: var(--medium); } .legend .ll { background: var(--low); }
+.legend .ls { background: var(--surface); box-shadow: inset 0 0 0 2px var(--accent); }
+.legend .lc { background: var(--node); }
+.hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--ink-3); background: var(--surface); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); pointer-events: none; }
+
+/* graph marks */
+.link { fill: none; stroke: var(--edge); stroke-linecap: round; marker-end: url(#ah); transition: opacity .2s; }
+.link.ignored { stroke-dasharray: 2 4; opacity: .5; }
+.link.dim { opacity: .32; }
+.link.hot { stroke-dasharray: 8 5; animation: flow .9s linear infinite; opacity: 1; }
+.link.hot-high { stroke: var(--high); marker-end: url(#ah-high); }
+.link.hot-medium { stroke: var(--medium); marker-end: url(#ah-medium); }
+.link.hot-low { stroke: var(--low); marker-end: url(#ah-low); }
+@keyframes flow { to { stroke-dashoffset: -13; } }
+.m-def { fill: var(--edge); } .m-high { fill: var(--high); } .m-medium { fill: var(--medium); } .m-low { fill: var(--low); }
+.node { cursor: pointer; transition: opacity .2s; }
+.node circle { stroke-width: 2; }
+.node.lvl-high circle { fill: var(--high); stroke: var(--surface); }
+.node.lvl-medium circle { fill: var(--medium); stroke: var(--surface); }
+.node.lvl-low circle { fill: var(--low); stroke: var(--surface); }
+.node.lvl-scc circle { fill: var(--surface); stroke: var(--accent); }
+.node.lvl-clear circle { fill: var(--node); stroke: var(--surface); }
+.node.dim { opacity: .42; }
+.node.on circle { stroke: var(--ink); stroke-width: 2.5; }
+.node.focus circle { stroke: var(--accent); stroke-width: 3.5; }
+.node text { font: 500 13px var(--f-body); fill: var(--ink); paint-order: stroke; stroke: var(--surface); stroke-width: 3.5px; stroke-linejoin: round; pointer-events: none; }
+.node.lvl-clear text { fill: var(--ink-2); }
+.hull { fill: var(--hull); stroke: var(--hull-line); stroke-width: 1.2; stroke-dasharray: 4 4; }
+.hull-label { font: 600 11.5px var(--f-mono); fill: var(--accent); letter-spacing: .04em; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.badge circle { stroke: var(--surface); stroke-width: 2; }
+.badge.b-high circle { fill: var(--high); } .badge.b-medium circle { fill: var(--medium); } .badge.b-low circle { fill: var(--low); }
+.badge text { font: 600 10px var(--f-mono); fill: var(--on-risk); text-anchor: middle; dominant-baseline: central; }
+.tooltip {
+  position: absolute; pointer-events: none; z-index: 5; min-width: 190px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow);
+  padding: 10px 12px; font-size: 12.5px; line-height: 1.45;
+}
+.tooltip b { display: block; font-size: 13.5px; margin-bottom: 4px; }
+.tooltip .kv { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-2); }
+.tooltip .kv span:last-child { font-family: var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* ---------- case file ---------- */
+.cases { max-height: 580px; overflow: auto; overscroll-behavior: contain; }
+.filter { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--accent-soft); font-size: 13px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.filter b { font-weight: 600; }
+.case { border-bottom: 1px solid var(--line); }
+.case > button {
+  all: unset; box-sizing: border-box; display: grid; gap: 8px; width: 100%; padding: 14px 16px; cursor: pointer;
+}
+.case > button:hover { background: var(--surface-2); }
+.case > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.case.sel > button { background: var(--surface-2); }
+.case-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 6px; font: 700 11px/1.2 var(--f-body); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.pill .num { font: 600 12.5px/1 var(--f-mono); letter-spacing: 0; }
+.pill.high { background: var(--high-soft); color: var(--high); }
+.pill.medium { background: var(--medium-soft); color: var(--medium); }
+.pill.low { background: var(--low-soft); color: var(--low); }
+.meta { font-size: 12.5px; color: var(--ink-3); }
+.trail { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13.5px; line-height: 1.35; }
+.trail .acct { font-weight: 600; }
+.trail .arr { color: var(--ink-3); font-size: 12px; }
+.amounts { font: 500 12.5px/1.5 var(--f-mono); color: var(--ink-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.detail { padding: 4px 16px 16px; display: grid; gap: 12px; background: var(--surface-2); }
+.hops { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.hops th { text-align: left; font: 600 10.5px var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); padding: 6px 6px; border-bottom: 1px solid var(--line); }
+.hops td { padding: 6px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.hops td.num, .hops th.num { text-align: right; white-space: nowrap; }
+.hops .dn { color: var(--high); } .hops .up { color: var(--accent); }
+.hop-n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font: 600 10px var(--f-mono); color: var(--on-risk); }
+.hop-n.high { background: var(--high); } .hop-n.medium { background: var(--medium); } .hop-n.low { background: var(--low); }
+.scroll-x { overflow-x: auto; min-width: 0; }
+.why { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.why li::before { content: "·"; margin-right: 8px; color: var(--ink-3); font-weight: 700; }
+.note-box { display: grid; gap: 8px; }
+.note-box textarea { width: 100%; min-height: 150px; resize: vertical; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); padding: 10px; font: 12px/1.5 var(--f-mono); }
+.empty { padding: 28px 18px; display: grid; gap: 8px; color: var(--ink-2); font-size: 14px; }
+.empty b { color: var(--ink); font: 700 16px var(--f-display); font-stretch: 110%; }
+.more { padding: 12px 16px; font-size: 12.5px; color: var(--ink-3); }
+.warn { padding: 10px 16px; font-size: 12.5px; background: var(--medium-soft); color: var(--ink); border-bottom: 1px solid var(--line); }
+
+/* ---------- tabs ---------- */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; padding-inline: 8px; }
+.tabs button {
+  border: 0; background: transparent; padding: 12px 14px 11px; cursor: pointer; font-weight: 600; font-size: 14px;
+  color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap;
+}
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabpanel { padding: 20px clamp(16px, 2.2vw, 28px) 26px; }
+
+.table-wrap { overflow: auto; max-height: 460px; border: 1px solid var(--line); border-radius: 8px; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; z-index: 1; }
+table.data td { padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.data tr:last-child td { border-bottom: 0; }
+table.data td.num, table.data th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+table.data tr.inloop td:first-child { box-shadow: inset 3px 0 0 var(--high); }
+.x { border: 0; background: transparent; color: var(--ink-3); cursor: pointer; padding: 2px 6px; border-radius: 5px; font-size: 16px; line-height: 1; }
+.x:hover { color: var(--high); background: var(--high-soft); }
+.split { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.stack { display: grid; gap: 12px; min-width: 0; }
+.addform { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+.field { display: grid; gap: 5px; min-width: 0; }
+.field input, textarea.csv { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 7px 9px; font-size: 13px; width: 100%; }
+textarea.csv { min-height: 220px; resize: vertical; font: 12px/1.5 var(--f-mono); }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.file-btn { position: relative; overflow: hidden; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.status { font-size: 12.5px; color: var(--ink-3); min-height: 1.4em; }
+.status.err { color: var(--high); }
+
+/* how it works */
+.how { display: grid; gap: 28px; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; counter-reset: step; }
+.step { border: 1px solid var(--line); border-radius: 9px; padding: 16px; display: grid; gap: 8px; align-content: start; background: var(--surface); }
+.step h3 { margin: 0; font: 700 16px/1.25 var(--f-display); font-stretch: 108%; display: flex; gap: 10px; align-items: baseline; text-wrap: balance; }
+.step h3::before { counter-increment: step; content: counter(step); font: 600 12px var(--f-mono); color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 2px 7px; }
+.step p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.step .live { font: 500 12.5px/1.45 var(--f-mono); color: var(--ink); background: var(--surface-2); border-radius: 6px; padding: 8px 10px; }
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; }
+.how h3.sub { margin: 0 0 10px; font: 700 15px var(--f-display); font-stretch: 110%; }
+.how table.data td { white-space: normal; }
+.how p.small { font-size: 13.5px; color: var(--ink-2); margin: 10px 0 0; max-width: 70ch; }
+caption.cap { caption-side: top; text-align: left; font-size: 12.5px; color: var(--ink-2); padding: 0 0 8px; }
+pre.cmd { margin: 0; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; line-height: 1.6; overflow-x: auto; }
+pre.cmd .c { color: var(--ink-3); }
+
+/* source viewer */
+.src-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.code { margin: 0; max-height: 620px; overflow: auto; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; font-size: 12.5px; line-height: 1.6; tab-size: 4; }
+.code .tk-c { color: var(--ink-3); font-style: italic; }
+.code .tk-k { color: var(--accent); font-weight: 600; }
+.code .tk-s { color: var(--medium); }
+.code .tk-n { color: var(--high); }
+.code .tk-p { color: var(--low); }
+
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; font-size: 12.5px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 1020px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .cases { max-height: none; }
+  .intro { grid-template-columns: minmax(0, 1fr); }
+  .split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  body { font-size: 14.5px; }
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .metric:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .hops .chg { display: none; }
+  .board { height: 420px; }
+  .controls { padding: 12px; }
+  .params { gap: 12px 18px; }
+  input[type="range"] { width: 104px; }
+  .hint { display: none; }
+  .metric dd { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .link.hot { animation: none; }
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+<!--/HEAD-->
+
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="LoopTrace home">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="10.5" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-dasharray="11.2 5.3"/>
+        <circle cx="16" cy="5.5" r="3.2" fill="var(--high)"/>
+        <circle cx="26.5" cy="16" r="3.2" fill="var(--accent)"/>
+        <circle cx="16" cy="26.5" r="3.2" fill="var(--accent)"/>
+        <circle cx="5.5" cy="16" r="3.2" fill="var(--accent)"/>
+      </svg>
+      <span><b>LoopTrace</b><small>Money-laundering loop detector</small></span>
+    </a>
+    <span class="engine" id="engine" title=""><i></i><span id="engineText">Loading engine…</span></span>
+  </header>
+
+  <section class="intro" id="top">
+    <h1>Follow the money until it <em>comes back.</em></h1>
+    <p>Accounts are nodes and transfers are directed edges. LoopTrace finds money that travels in a circle back to its source, the <strong>layering</strong> step of laundering, using <strong>Tarjan's SCC algorithm</strong> and a <strong>time-pruned DFS</strong> written in C, then ranks every loop by risk.</p>
+  </section>
+
+  <section class="controls" aria-label="Data and settings">
+    <div class="group">
+      <span class="label" id="dsLabel">Dataset</span>
+      <div class="seg" role="group" aria-labelledby="dsLabel" id="datasets">
+        <button type="button" data-ds="sample" aria-pressed="true">Bank sample</button>
+        <button type="button" data-ds="clean" aria-pressed="false">Clean payroll</button>
+        <button type="button" data-ds="synthetic" aria-pressed="false">Synthetic network</button>
+        <button type="button" data-ds="custom" aria-pressed="false">Your data</button>
+      </div>
+    </div>
+    <div class="params">
+      <div class="param">
+        <label class="label" for="maxLen">Max hops</label>
+        <div class="row"><input type="range" id="maxLen" min="2" max="8" step="1" value="6"><output id="maxLenOut" for="maxLen">6</output></div>
+      </div>
+      <div class="param">
+        <label class="label" for="window">Time window</label>
+        <div class="row"><input type="range" id="window" min="6" max="240" step="6" value="72"><output id="windowOut" for="window">72 h</output></div>
+      </div>
+      <div class="param">
+        <label class="label" for="minAmount">Ignore transfers below</label>
+        <div class="money"><span>₹</span><input type="number" id="minAmount" min="0" step="500" value="0" inputmode="numeric"></div>
+      </div>
+      <div class="param">
+        <span class="label">Search mode</span>
+        <label class="switch" for="chrono"><input type="checkbox" id="chrono" checked><span class="track"></span><span id="chronoText">Hops in time order</span></label>
+      </div>
+      <button type="button" class="btn" id="reseed" hidden>New random network</button>
+    </div>
+  </section>
+
+  <dl class="metrics" id="metrics" aria-live="polite"></dl>
+
+  <section class="workspace">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Transfer network</h2>
+        <div class="tools">
+          <div class="legend" aria-label="Legend">
+            <span><i class="lh"></i>High risk</span>
+            <span><i class="lm"></i>Medium</span>
+            <span><i class="ll"></i>Low</span>
+            <span><i class="ls"></i>Could loop (SCC)</span>
+            <span><i class="lc"></i>Cleared</span>
+          </div>
+          <label class="switch" for="hulls" style="font-size:12.5px"><input type="checkbox" id="hulls" checked><span class="track"></span>SCC outlines</label>
+          <button type="button" class="btn small" id="fitBtn">Reset view</button>
+        </div>
+      </div>
+      <div class="board" id="board">
+        <svg id="net" role="img" aria-label="Network of accounts and transfers"></svg>
+        <div class="tooltip" id="tip" hidden></div>
+        <div class="hint">Drag accounts · scroll to zoom · click an account to see its loops</div>
+      </div>
+    </div>
+
+    <aside class="panel" aria-label="Detected loops">
+      <div class="panel-head">
+        <h2>Case file</h2>
+        <span class="meta" id="caseCount"></span>
+      </div>
+      <div class="cases" id="cases"></div>
+    </aside>
+  </section>
+
+  <section class="panel" id="lower">
+    <div class="tabs" role="tablist" aria-label="More">
+      <button type="button" role="tab" id="t-how" aria-controls="p-how" aria-selected="true">How it works</button>
+      <button type="button" role="tab" id="t-accounts" aria-controls="p-accounts" aria-selected="false">Flagged accounts</button>
+      <button type="button" role="tab" id="t-transactions" aria-controls="p-transactions" aria-selected="false">Transactions</button>
+      <button type="button" role="tab" id="t-source" aria-controls="p-source" aria-selected="false">C source</button>
+    </div>
+
+    <div class="tabpanel how" role="tabpanel" id="p-how" aria-labelledby="t-how">
+      <div class="steps">
+        <div class="step">
+          <h3>Build the graph</h3>
+          <p>Each transfer is pushed onto the front of its sender's adjacency list in O(1). The whole graph lives in one struct with fixed arrays and no <code>malloc</code>, so the same C file runs in a terminal and in this page.</p>
+          <div class="live" id="live1"></div>
+        </div>
+        <div class="step">
+          <h3>Split into SCCs with Tarjan</h3>
+          <p>Money can only return to an account through its strongly connected component. One O(V + E) pass clears every account that sits alone in its SCC.</p>
+          <div class="live" id="live2"></div>
+        </div>
+        <div class="step">
+          <h3>Enumerate loops with a pruned DFS</h3>
+          <p>Inside each SCC, a depth-limited DFS starts from the smallest account id and only visits larger ids, so each loop is found once. A branch is cut when its hops go back in time twice or spread wider than the time window.</p>
+          <div class="live" id="live3"></div>
+        </div>
+        <div class="step">
+          <h3>Score and rank</h3>
+          <p>Every loop gets a 0–100 score from how much of the money survives, how quickly the hops follow each other, the loop's shape and its size. A heap sort puts the riskiest loop first.</p>
+          <div class="live" id="live4"></div>
+        </div>
+      </div>
+
+      <div class="cols2">
+        <div>
+          <h3 class="sub">Data structures and cost</h3>
+          <div class="scroll-x">
+            <table class="data">
+              <thead><tr><th>Step</th><th>Structure</th><th>Time</th></tr></thead>
+              <tbody>
+                <tr><td>Store transfers</td><td>Adjacency list in arrays</td><td class="mono">O(1) each</td></tr>
+                <tr><td>Name → account id (CLI)</td><td>Hash table, open addressing, djb2</td><td class="mono">O(1) avg</td></tr>
+                <tr><td>Find SCCs</td><td>Tarjan's algorithm with an explicit stack</td><td class="mono">O(V + E)</td></tr>
+                <tr><td>Find loops</td><td>Depth-limited DFS with time pruning</td><td class="mono">capped at 3M steps</td></tr>
+                <tr><td>Rank loops</td><td>Binary heap (heap sort)</td><td class="mono">O(C log C)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3 class="sub">Risk score</h3>
+          <div class="scroll-x">
+            <table class="data">
+              <thead><tr><th>Signal</th><th class="num">Points</th><th>Why it matters</th></tr></thead>
+              <tbody>
+                <tr><td>Amount kept</td><td class="num">0–45</td><td>Smallest ÷ largest hop. Laundered money keeps most of its value.</td></tr>
+                <tr><td>Timing</td><td class="num">0–35</td><td>Hops follow each other; full points if the loop closes inside the window.</td></tr>
+                <tr><td>Shape</td><td class="num">5–20</td><td>3–5 hops is typical layering. Two-account round trips are often refunds.</td></tr>
+                <tr><td>Volume</td><td class="num">× 0.4–1.0</td><td>Loop's smallest hop compared with the largest transfer in the data.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small">70 and above is high risk, 40–69 medium, below 40 low.</p>
+        </div>
+      </div>
+
+      <div class="cols2">
+        <div>
+          <h3 class="sub">Why the time pruning matters</h3>
+          <div class="scroll-x">
+            <table class="data">
+              <caption class="cap">1,000 accounts · 7,883 transfers · 20 hidden rings</caption>
+              <thead><tr><th>Search</th><th class="num">DFS steps</th><th class="num">Rings found</th></tr></thead>
+              <tbody>
+                <tr><td>Any-order search</td><td class="num">1,496,135</td><td class="num">19 of 20, limit hit</td></tr>
+                <tr><td>Hops in time order (default)</td><td class="num">84,771</td><td class="num">20 of 20, ranked 1–20</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small">Measured with <code>tools/gen_data.c</code>. One SCC holds 898 of the 1,000 accounts, so an unpruned search explores millions of paths, hits its step budget and misses a ring. With time pruning it finishes in about a millisecond and ranks every planted ring in the top 20.</p>
+        </div>
+        <div>
+          <h3 class="sub">Run it yourself</h3>
+<pre class="cmd"><span class="c"># build the CLI, the data generator and the tests</span>
+make
+make test          <span class="c"># 31 checks</span>
+./looptrace data/sample.csv --window 72 --max-len 6
+
+<span class="c"># rebuild the engine used by this page</span>
+make wasm web</pre>
+          <p class="small">CSV columns: <code>from,to,amount,time_hours</code>. Paste your own in the Transactions tab.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabpanel" role="tabpanel" id="p-accounts" aria-labelledby="t-accounts" hidden>
+      <div class="stack">
+        <p class="note" id="acctNote"></p>
+        <div class="table-wrap">
+          <table class="data">
+            <thead><tr><th>Account</th><th>Risk</th><th class="num">Loops</th><th class="num">SCC size</th><th class="num">Sent</th><th class="num">Received</th></tr></thead>
+            <tbody id="acctBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabpanel" role="tabpanel" id="p-transactions" aria-labelledby="t-transactions" hidden>
+      <div class="split">
+        <div class="stack">
+          <form class="addform" id="addForm" autocomplete="off">
+            <div class="field"><label class="label" for="fFrom">From</label><input id="fFrom" list="acctList" required placeholder="Orion Imports"></div>
+            <div class="field"><label class="label" for="fTo">To</label><input id="fTo" list="acctList" required placeholder="Kestrel Holdings"></div>
+            <div class="field"><label class="label" for="fAmt">Amount (₹)</label><input id="fAmt" type="number" min="1" step="any" required placeholder="25000"></div>
+            <div class="field"><label class="label" for="fTime">Hour</label><input id="fTime" type="number" min="0" step="any" required placeholder="36"></div>
+            <button class="btn primary" type="submit">Add transfer</button>
+            <datalist id="acctList"></datalist>
+          </form>
+          <div class="status" id="addStatus"></div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th class="num">#</th><th>From</th><th>To</th><th class="num">Amount</th><th>When</th><th>Remove</th></tr></thead>
+              <tbody id="txBody"></tbody>
+            </table>
+          </div>
+          <p class="note">Rows marked with a red edge are part of at least one detected loop. Hour is measured from the start of the dataset (hour 30 is Day 2, 06:00).</p>
+        </div>
+        <div class="stack">
+          <label class="label" for="csvBox">Edit as CSV</label>
+          <textarea class="csv" id="csvBox" spellcheck="false"></textarea>
+          <div class="row-actions">
+            <button type="button" class="btn primary" id="applyCsv">Analyze this CSV</button>
+            <span class="btn file-btn">Open .csv file<input type="file" id="csvFile" accept=".csv,text/csv,text/plain"></span>
+            <button type="button" class="btn" id="copyCsv">Copy</button>
+          </div>
+          <div class="status" id="csvStatus"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabpanel" role="tabpanel" id="p-source" aria-labelledby="t-source" hidden>
+      <div class="src-head">
+        <div class="seg" role="group" aria-label="Source file" id="srcFiles"></div>
+        <button type="button" class="btn small" id="copySrc">Copy file</button>
+      </div>
+      <pre class="code" id="srcCode"></pre>
+    </div>
+  </section>
+
+  <footer>
+    <span>LoopTrace · a data structures project in C · Tarjan's SCC, bounded DFS, heap sort, hashing</span>
+    <span><!-- author -->All account names and transfers are fictional.</span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+(function () {
+"use strict";
+const WASM_B64 = "__WASM_B64__";
+const SOURCES = /*__SOURCES__*/null;
+const SAMPLE_CSV = /*__SAMPLE__*/"";
+const CLEAN_CSV = /*__CLEAN__*/"";
+const E = window.LoopTraceEngine;
+const FLAG = E.FLAG;
+
+/* ---------------- engine ---------------- */
+let engine;
+(function pickEngine() {
+  const badge = document.getElementById("engine"), text = document.getElementById("engineText");
+  try {
+    const bin = atob(WASM_B64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    engine = E.makeWasm(bytes);
+    text.textContent = "C engine · WebAssembly · " + (bytes.length / 1024).toFixed(1) + " KB";
+    badge.title = "src/fraud.c compiled with clang --target=wasm32, running in your browser";
+  } catch (err) {
+    engine = { name: "js", analyze: E.analyzeJS };
+    badge.classList.add("fallback");
+    text.textContent = "JavaScript port of the C engine";
+    badge.title = "This browser blocked WebAssembly, so a line-by-line JavaScript port of fraud.c is running instead";
+  }
+})();
+
+/* ---------------- helpers ---------------- */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rupees = (x) => "₹" + Math.round(x).toLocaleString("en-IN");
+const int = (x) => Math.round(x).toLocaleString("en-IN");
+const level = (s) => (s >= 70 ? "high" : s >= 40 ? "medium" : "low");
+const levelName = { high: "High", medium: "Medium", low: "Low" };
+const hrs = (h) => (Math.round(h * 10) / 10).toLocaleString("en-IN") + " h";
+function when(h) {
+  const day = Math.floor(h / 24) + 1, mins = Math.round((h - (day - 1) * 24) * 60);
+  const hh = Math.floor(mins / 60) % 24, mm = mins % 60;
+  return "Day " + day + ", " + String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+}
+
+function parseCSV(text) {
+  const rows = []; let bad = 0, first = true;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const f = line.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+    const amount = parseFloat(f[2]);
+    if (f.length < 4 || isNaN(amount)) { if (!first) bad++; first = false; continue; }
+    first = false;
+    rows.push({ from: f[0], to: f[1], amount, time: parseFloat(f[3]) || 0 });
+  }
+  return { rows, bad };
+}
+const toCSV = (rows) => "from,to,amount,time_hours\n" + rows.map((r) => [r.from, r.to, r.amount, r.time].join(",")).join("\n") + "\n";
+
+/* ---------------- state ---------------- */
+const S = {
+  ds: "sample", seed: 20260930, rows: [],
+  params: { maxLen: 6, window: 72, minAmount: 0, chrono: true },
+  prep: null, res: null, ms: 0, sel: -1, focus: -1, showHulls: true, src: "fraud.c",
+};
+const DATA = {
+  sample: () => parseCSV(SAMPLE_CSV).rows,
+  clean: () => parseCSV(CLEAN_CSV).rows,
+  synthetic: () => E.generate(S.seed, 150, 600, 4),
+};
+
+function loadDataset(ds) {
+  S.ds = ds;
+  if (DATA[ds]) S.rows = DATA[ds]();
+  S.focus = -1; S.sel = -1;
+  document.querySelectorAll("#datasets button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.ds === ds)));
+  $("reseed").hidden = ds !== "synthetic";
+  analyze(true);
+  $("cases").scrollTop = 0;
+}
+
+function sig(c) { return c ? c.edges.join("-") : ""; }
+
+function analyze(dataChanged) {
+  const prevSig = S.res && S.sel >= 0 ? sig(S.res.cycles[S.sel]) : "";
+  const prevFocusName = S.prep && S.focus >= 0 ? S.prep.names[S.focus] : null;
+  S.prep = E.prepare(S.rows);
+  const t0 = performance.now();
+  S.res = engine.analyze(S.prep.names.length, S.prep.edges, S.params);
+  S.ms = performance.now() - t0;
+  const cyc = S.res.cycles;
+  let keep = prevSig ? cyc.findIndex((c) => sig(c) === prevSig) : -1;
+  S.focus = prevFocusName ? S.prep.names.indexOf(prevFocusName) : -1;
+  if (keep < 0) keep = visibleCycles()[0]?.i ?? -1;
+  S.sel = keep;
+  if (dataChanged) buildGraph();
+  renderAll();
+}
+
+function visibleCycles() {
+  const out = [];
+  S.res.cycles.forEach((c, i) => {
+    if (S.focus < 0 || c.edges.some((e) => S.prep.edges[e].from === S.focus)) out.push({ c, i });
+  });
+  return out;
+}
+
+/* ---------------- metrics ---------------- */
+function renderMetrics() {
+  const { names, edges } = S.prep, r = S.res, n = names.length;
+  let multi = 0, cleared = 0;
+  for (let s = 0; s < r.nSccs; s++) if (r.sccSize[s] > 1) multi++;
+  for (let v = 0; v < n; v++) if (r.sccSize[r.sccOf[v]] < 2) cleared++;
+  const cnt = { high: 0, medium: 0, low: 0 };
+  r.cycles.forEach((c) => cnt[level(c.score)]++);
+  $("metrics").innerHTML =
+    `<div class="metric"><dt>Accounts</dt><dd>${int(n)}<small>${int(edges.length)} transfers</small></dd></div>` +
+    `<div class="metric"><dt>SCCs</dt><dd>${int(r.nSccs)}<small>${multi} with 2+ accounts</small></dd></div>` +
+    `<div class="metric"><dt>Cleared by Tarjan</dt><dd>${int(cleared)}<small>of ${int(n)} accounts can't loop</small></dd></div>` +
+    `<div class="metric"><dt>Loops found</dt><dd>${int(r.cycles.length)}${r.truncated ? "+" : ""}<span class="dots"><span class="h">${cnt.high} high</span><span class="m">${cnt.medium} med</span><span class="l">${cnt.low} low</span></span></dd></div>` +
+    `<div class="metric"><dt>Search</dt><dd>${int(r.steps)}<small>DFS steps · ${S.ms < 1 ? S.ms.toFixed(2) : S.ms.toFixed(1)} ms</small></dd></div>`;
+}
+
+/* ---------------- graph ---------------- */
+const G = { nodes: [], links: [], edgePair: null, sim: null, zoom: null, userZoomed: false, pos: new Map() };
+const svg = d3.select("#net");
+svg.html(`<defs>
+  <marker id="ah" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto"><path class="m-def" d="M0,0.5 L8,4 L0,7.5 z"/></marker>
+  <marker id="ah-high" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path class="m-high" d="M0,0.5 L8,4 L0,7.5 z"/></marker>
+  <marker id="ah-medium" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path class="m-medium" d="M0,0.5 L8,4 L0,7.5 z"/></marker>
+  <marker id="ah-low" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path class="m-low" d="M0,0.5 L8,4 L0,7.5 z"/></marker>
+</defs><g class="vp"><g class="hulls"></g><g class="links"></g><g class="nodes"></g><g class="badges"></g></g>`);
+const vp = svg.select(".vp");
+G.zoom = d3.zoom().scaleExtent([0.2, 5]).on("zoom", (ev) => {
+  vp.attr("transform", ev.transform);
+  if (ev.sourceEvent) G.userZoomed = true;
+});
+svg.call(G.zoom).on("dblclick.zoom", null);
+svg.on("click", (ev) => { if (ev.target === svg.node() && S.focus >= 0) { S.focus = -1; renderAll(); } });
+
+function buildGraph() {
+  G.nodes.forEach((d) => G.pos.set(d.name, { x: d.x, y: d.y }));   /* keep layout across edits */
+  const { names, edges } = S.prep, n = names.length;
+  const sent = new Float64Array(n), recv = new Float64Array(n);
+  const pairIndex = new Map();
+  G.links = []; G.edgePair = new Int32Array(edges.length).fill(-1);
+  edges.forEach((e, i) => {
+    sent[e.from] += e.amount; recv[e.to] += e.amount;
+    if (e.from === e.to) return;
+    const key = e.from + ">" + e.to;
+    let li = pairIndex.get(key);
+    if (li === undefined) { li = G.links.length; pairIndex.set(key, li); G.links.push({ source: e.from, target: e.to, s: e.from, t: e.to, total: 0, edges: [] }); }
+    G.links[li].total += e.amount; G.links[li].edges.push(i); G.edgePair[i] = li;
+  });
+  let maxVol = 1, maxPair = 1;
+  for (let v = 0; v < n; v++) maxVol = Math.max(maxVol, sent[v], recv[v]);
+  G.links.forEach((L) => { L.bi = pairIndex.has(L.t + ">" + L.s); maxPair = Math.max(maxPair, L.total); });
+  G.links.forEach((L) => { L.w = 0.9 + 2.6 * Math.sqrt(L.total / maxPair); });
+  const big = n > 60;
+  G.big = big;
+  const bw = $("board").clientWidth || 900, bh = $("board").clientHeight || 580;
+  const aspect = Math.max(0.5, Math.min(2.2, bw / bh));
+  G.nodes = names.map((name, id) => {
+    const c = G.pos.get(name), vol = Math.max(sent[id], recv[id]);
+    return { id, name, sent: sent[id], recv: recv[id], r: (big ? 4 : 6) + (big ? 6 : 9) * Math.sqrt(vol / maxVol), x: c ? c.x : undefined, y: c ? c.y : undefined };
+  });
+  const cached = n > 0 && G.nodes.every((d) => d.x !== undefined);
+
+  if (G.sim) G.sim.stop();
+  G.sim = d3.forceSimulation(G.nodes)
+    .force("link", d3.forceLink(G.links).id((d) => d.id).distance(big ? 34 : 105).strength(big ? 0.3 : 0.5))
+    .force("charge", d3.forceManyBody().strength(big ? -60 : -620).distanceMax(big ? 220 : 700))
+    .force("x", d3.forceX(0).strength((big ? 0.07 : 0.06) / aspect))
+    .force("y", d3.forceY(0).strength((big ? 0.07 : 0.06) * aspect))
+    .force("collide", d3.forceCollide((d) => d.r + (big ? 3 : 24)))
+    .stop();
+  G.sim.alpha(cached ? 0.25 : 1);
+  for (let i = 0; i < (cached ? 40 : 320); i++) G.sim.tick();
+  G.sim.alpha(0).on("tick", paint);
+  G.cx = G.nodes.reduce((a, d) => a + d.x, 0) / Math.max(1, n);
+
+  const drag = d3.drag()
+    .on("start", (ev, d) => { if (!ev.active) G.sim.alphaTarget(0.25).restart(); d.fx = d.x; d.fy = d.y; })
+    .on("drag", (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+    .on("end", (ev, d) => { if (!ev.active) G.sim.alphaTarget(0); d.fx = null; d.fy = null; });
+
+  vp.select(".links").selectAll("path").data(G.links).join("path")
+    .attr("stroke-width", (L) => L.w);
+  const nodeSel = vp.select(".nodes").selectAll("g.node").data(G.nodes, (d) => d.name).join((enter) => {
+    const g = enter.append("g").attr("class", "node");
+    g.append("circle");
+    g.append("text").attr("dy", "0.35em");
+    return g;
+  });
+  nodeSel.select("circle").attr("r", (d) => d.r);
+  nodeSel.select("text").text((d) => d.name);
+  nodeSel.call(drag)
+    .on("mouseenter", (ev, d) => showTip(ev, d))
+    .on("mousemove", (ev, d) => showTip(ev, d))
+    .on("mouseleave", hideTip)
+    .on("click", (ev, d) => { ev.stopPropagation(); S.focus = S.focus === d.id ? -1 : d.id; const v = visibleCycles(); if (!v.some((x) => x.i === S.sel)) S.sel = v[0]?.i ?? -1; renderAll(); });
+
+  G.userZoomed = false;
+  requestAnimationFrame(() => fit(false));
+}
+
+function curve(L) {
+  const a = L.source, b = L.target;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const k = L.bi ? 0.2 : 0.08;
+  const cx = (a.x + b.x) / 2 - dy * k, cy = (a.y + b.y) / 2 + dx * k;
+  const sx0 = cx - a.x, sy0 = cy - a.y, sl = Math.hypot(sx0, sy0) || 1;
+  const ex0 = b.x - cx, ey0 = b.y - cy, el = Math.hypot(ex0, ey0) || 1;
+  const sx = a.x + (sx0 / sl) * (a.r + 1), sy = a.y + (sy0 / sl) * (a.r + 1);
+  const ex = b.x - (ex0 / el) * (b.r + 2.5), ey = b.y - (ey0 / el) * (b.r + 2.5);
+  L.mx = 0.25 * sx + 0.5 * cx + 0.25 * ex; L.my = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+  return `M${sx.toFixed(1)},${sy.toFixed(1)}Q${cx.toFixed(1)},${cy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`;
+}
+
+function hullPath(members) {
+  const pts = [];
+  for (const d of members) for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2, rr = d.r + 16;
+    pts.push([d.x + rr * Math.cos(a), d.y + rr * Math.sin(a)]);
+  }
+  const h = d3.polygonHull(pts);
+  return h ? d3.line().curve(d3.curveCatmullRomClosed.alpha(0.6))(h) : "";
+}
+
+function paint() {
+  vp.select(".links").selectAll("path").attr("d", curve);
+  vp.select(".nodes").selectAll("g.node").attr("transform", (d) => `translate(${d.x.toFixed(1)},${d.y.toFixed(1)})`)
+    .select("text").attr("text-anchor", (d) => (d.x < G.cx ? "end" : "start")).attr("x", (d) => (d.x < G.cx ? -(d.r + 5) : d.r + 5));
+  vp.select(".badges").selectAll("g.badge").attr("transform", (b) => `translate(${G.links[b.li].mx.toFixed(1)},${G.links[b.li].my.toFixed(1)})`);
+  vp.select(".hulls").selectAll("g.h").each(function (h) {
+    const g = d3.select(this);
+    g.select("path").attr("d", hullPath(h.members));
+    const top = h.members.reduce((m, d) => (d.y - d.r < m.y - m.r ? d : m), h.members[0]);
+    g.select("text").attr("x", top.x).attr("y", top.y - top.r - 22).attr("text-anchor", "middle");
+  });
+}
+
+function nodeLevel(v) {
+  const r = S.res, risk = r.risk[v];
+  if (risk >= 70) return "high";
+  if (risk >= 40) return "medium";
+  if (risk > 0) return "low";
+  return r.sccSize[r.sccOf[v]] > 1 ? "scc" : "clear";
+}
+
+function updateGraph() {
+  const r = S.res, edges = S.prep.edges, sel = S.sel >= 0 ? r.cycles[S.sel] : null;
+  const lvl = sel ? level(sel.score) : "";
+  const hot = new Map(), onNodes = new Set();
+  if (sel) sel.edges.forEach((e, k) => { hot.set(G.edgePair[e], k + 1); onNodes.add(edges[e].from); });
+  const showAllLabels = !G.big;
+
+  vp.select(".links").selectAll("path").attr("class", (L, i) => {
+    let c = "link";
+    if (L.edges.every((e) => edges[e].amount < S.params.minAmount)) c += " ignored";
+    if (hot.has(i)) c += " hot hot-" + lvl; else if (sel) c += " dim";
+    return c;
+  }).attr("stroke-width", (L, i) => (hot.has(i) ? L.w + 1.6 : L.w));
+
+  vp.select(".nodes").selectAll("g.node")
+    .attr("class", (d) => "node lvl-" + nodeLevel(d.id) + (sel ? (onNodes.has(d.id) ? " on" : " dim") : "") + (S.focus === d.id ? " focus" : ""))
+    .each(function (d) {
+      const lv = nodeLevel(d.id);
+      const show = showAllLabels || onNodes.has(d.id) || S.focus === d.id || (!sel && (lv === "high" || lv === "medium"));
+      d3.select(this).select("text").attr("display", show ? null : "none");
+    });
+  vp.select(".nodes").selectAll("g.node").filter((d) => onNodes.has(d.id)).raise();
+
+  const badges = [...hot].map(([li, k]) => ({ li, k }));
+  vp.select(".badges").selectAll("g.badge").data(badges, (b) => b.li + ":" + b.k).join((enter) => {
+    const g = enter.append("g");
+    g.append("circle").attr("r", 8.5);
+    g.append("text");
+    return g;
+  }).attr("class", "badge b-" + lvl).select("text").text((b) => b.k);
+
+  const hulls = [];
+  if (S.showHulls) {
+    const groups = new Map();
+    G.nodes.forEach((d) => { const s = r.sccOf[d.id]; if (r.sccSize[s] > 1 && r.sccSize[s] <= 40) { if (!groups.has(s)) groups.set(s, []); groups.get(s).push(d); } });
+    groups.forEach((members, s) => hulls.push({ s, members }));
+  }
+  vp.select(".hulls").selectAll("g.h").data(hulls, (h) => h.s + ":" + h.members.length).join((enter) => {
+    const g = enter.append("g").attr("class", "h");
+    g.append("path").attr("class", "hull");
+    g.append("text").attr("class", "hull-label");
+    return g;
+  }).select("text").text((h) => "SCC · " + h.members.length);
+  paint();
+}
+
+function fit(animate) {
+  const el = svg.node(), W = el.clientWidth, H = el.clientHeight;
+  if (!W || !H || !G.nodes.length) return;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  G.nodes.forEach((d) => { x0 = Math.min(x0, d.x - d.r); y0 = Math.min(y0, d.y - d.r); x1 = Math.max(x1, d.x + d.r); y1 = Math.max(y1, d.y + d.r); });
+  const padX = G.big ? 24 : W < 520 ? 70 : 110, padY = 36;
+  x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
+  const s = Math.min(W / (x1 - x0), H / (y1 - y0), 1.7);
+  const t = d3.zoomIdentity.translate(W / 2 - s * (x0 + x1) / 2, H / 2 - s * (y0 + y1) / 2).scale(s);
+  (animate ? svg.transition().duration(400) : svg).call(G.zoom.transform, t);
+}
+$("fitBtn").addEventListener("click", () => { G.userZoomed = false; fit(true); });
+new ResizeObserver(() => { if (!G.userZoomed) fit(false); }).observe($("board"));
+
+function showTip(ev, d) {
+  const r = S.res, tip = $("tip"), board = $("board").getBoundingClientRect();
+  const lv = nodeLevel(d.id), scc = r.sccSize[r.sccOf[d.id]];
+  const status = lv === "clear" ? "Cleared: money can't return here" : lv === "scc" ? "In an SCC, no loop matches the settings" : levelName[lv] + " risk · score " + r.risk[d.id];
+  tip.innerHTML = `<b>${esc(d.name)}</b><div style="margin-bottom:6px;color:var(--ink-2)">${status}</div>` +
+    `<div class="kv"><span>Loops</span><span>${r.hits[d.id]}</span></div>` +
+    `<div class="kv"><span>SCC size</span><span>${scc}</span></div>` +
+    `<div class="kv"><span>Sent</span><span>${rupees(d.sent)}</span></div>` +
+    `<div class="kv"><span>Received</span><span>${rupees(d.recv)}</span></div>`;
+  tip.hidden = false;
+  const x = ev.clientX - board.left, y = ev.clientY - board.top, w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(8, Math.min(x + 14, board.width - w - 8)) + "px";
+  tip.style.top = Math.max(8, Math.min(y + 14, board.height - h - 8)) + "px";
+}
+function hideTip() { $("tip").hidden = true; }
+
+/* ---------------- case file ---------------- */
+function flagChips(c) {
+  const out = [];
+  if (c.flags & FLAG.ORDERED) out.push("Hops in sequence");
+  if (c.flags & FLAG.FAST) out.push("Closes within " + S.params.window + " h");
+  if (c.flags & FLAG.SIMILAR) out.push("Amounts within 15%");
+  if (c.flags & FLAG.ROUND_TRIP) out.push("Round trip");
+  if (!(c.flags & FLAG.ORDERED)) out.push("Out of time order");
+  return out;
+}
+
+function caseNote(c) {
+  const ed = S.prep.edges, nm = S.prep.names, lv = level(c.score);
+  const path = c.edges.map((e) => nm[ed[e].from]).concat(nm[ed[c.edges[0]].from]).join(" -> ");
+  const amts = c.edges.map((e) => rupees(ed[e].amount).replace("₹", "INR ")).join(" -> ");
+  const first = ed[c.edges[0]].time, last = ed[c.edges[c.len - 1]].time;
+  const kept = (100 * ed[c.edges[c.len - 1]].amount / ed[c.edges[0]].amount).toFixed(1);
+  return [
+    `LoopTrace case note: ${levelName[lv].toUpperCase()} risk (${c.score}/100)`,
+    `Loop (${c.len} hops): ${path}`,
+    `Amounts: ${amts}`,
+    `Timing: ${when(first)} to ${when(last)}, span ${hrs(c.span)}`,
+    `Money returned to origin: ${kept}% of the first transfer`,
+    `Indicators: ${flagChips(c).join("; ")}`,
+    lv === "high" ? "Suggested action: review for layering and consider escalating for a suspicious transaction report (STR)." :
+    lv === "medium" ? "Suggested action: review account relationships and the purpose of these transfers." :
+    "Suggested action: no action; pattern is consistent with ordinary activity.",
+  ].join("\n");
+}
+
+function renderCases() {
+  const r = S.res, ed = S.prep.edges, nm = S.prep.names, box = $("cases");
+  const vis = visibleCycles(), LIMIT = 120;
+  $("caseCount").textContent = r.cycles.length ? `${vis.length} loop${vis.length === 1 ? "" : "s"}` : "";
+  let html = "";
+  if (S.focus >= 0) html += `<div class="filter">Loops through <b>${esc(nm[S.focus])}</b><button type="button" class="btn small" data-act="clear">Show all</button></div>`;
+  if (r.truncated) html += `<div class="warn">The search hit its step limit. Showing the riskiest loops it kept; lower Max hops or turn on time order for a complete search.</div>`;
+  if (!vis.length) {
+    const multi = Array.from(r.sccSize).filter((x) => x > 1).length;
+    html += S.focus >= 0
+      ? `<div class="empty"><b>No loops through this account</b>It never receives back money it sent, under the current settings.</div>`
+      : `<div class="empty"><b>No money loops found</b>${multi ? `${multi} group${multi > 1 ? "s" : ""} of accounts could form a loop, but none matches the current settings. Try a longer time window, more hops, or turn off time order.` : "Every account is in its own SCC, so money never returns to where it came from."}</div>`;
+  }
+  vis.slice(0, LIMIT).forEach(({ c, i }) => {
+    const lv = level(c.score), selected = i === S.sel;
+    const accts = c.edges.map((e) => nm[ed[e].from]);
+    const trail = accts.concat(accts[0]).map((a, k) => (k ? '<span class="arr" aria-hidden="true">→</span>' : "") + `<span class="acct">${esc(a)}</span>`).join("");
+    const amts = c.edges.map((e) => rupees(ed[e].amount)).join("  →  ");
+    html += `<div class="case${selected ? " sel" : ""}"><button type="button" data-i="${i}" aria-expanded="${selected}">
+      <span class="case-top"><span class="pill ${lv}">${levelName[lv]} <span class="num">${c.score}</span></span><span class="meta">${c.len} hops · ${hrs(c.span)} · ${rupees(c.total)} moved</span></span>
+      <span class="trail">${trail}</span>
+      <span class="amounts">${amts}</span>
+    </button>${selected ? renderDetail(c) : ""}</div>`;
+  });
+  if (vis.length > LIMIT) html += `<div class="more">Showing the ${LIMIT} riskiest of ${vis.length} loops.</div>`;
+  box.innerHTML = html;
+}
+
+function renderDetail(c) {
+  const ed = S.prep.edges, nm = S.prep.names, lv = level(c.score);
+  let rows = "";
+  c.edges.forEach((e, k) => {
+    const t = ed[e], prev = k ? ed[c.edges[k - 1]].amount : null;
+    const ch = prev ? ((t.amount - prev) / prev) * 100 : null;
+    const chTxt = ch === null ? "–" : `<span class="${ch < 0 ? "dn" : "up"}">${ch > 0 ? "+" : ""}${ch.toFixed(1)}%</span>`;
+    rows += `<tr><td><span class="hop-n ${lv}">${k + 1}</span></td><td>${esc(nm[t.from])} → ${esc(nm[t.to])}</td><td class="num mono">${rupees(t.amount)}</td><td class="num mono chg">${chTxt}</td><td class="num">${when(t.time)}</td></tr>`;
+  });
+  const kept = (100 * ed[c.edges[c.len - 1]].amount / ed[c.edges[0]].amount).toFixed(1);
+  const chips = flagChips(c).map((f) => `<span class="chip">${f}</span>`).join("");
+  return `<div class="detail">
+    <div class="scroll-x"><table class="hops"><thead><tr><th>Hop</th><th>Transfer</th><th class="num">Amount</th><th class="num chg">Change</th><th class="num">When</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="chips">${chips}</div>
+    <ul class="why">
+      <li>${kept}% of the first transfer comes back to where it started.</li>
+      <li>The smallest hop is ${rupees(c.min)}; the loop moves ${rupees(c.total)} in total.</li>
+    </ul>
+    <div class="note-box">
+      <div class="row-actions"><button type="button" class="btn small" data-act="copynote">Copy case note</button><span class="status" id="noteStatus"></span></div>
+      <textarea readonly id="noteText" aria-label="Case note">${esc(caseNote(c))}</textarea>
+    </div>
+  </div>`;
+}
+
+$("cases").addEventListener("click", (ev) => {
+  const act = ev.target.closest("[data-act]");
+  if (act && act.dataset.act === "clear") { S.focus = -1; renderAll(); return; }
+  if (act && act.dataset.act === "copynote") {
+    const ta = $("noteText"), st = $("noteStatus");
+    const fallback = () => { ta.focus(); ta.select(); st.textContent = "Selected. Press Ctrl+C to copy."; };
+    if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => { st.textContent = "Copied"; }, fallback); else fallback();
+    return;
+  }
+  const b = ev.target.closest("button[data-i]");
+  if (!b) return;
+  const i = +b.dataset.i;
+  S.sel = S.sel === i ? -1 : i;
+  renderCases(); updateGraph();
+});
+
+/* ---------------- accounts ---------------- */
+function renderAccounts() {
+  const r = S.res, nm = S.prep.names, n = nm.length;
+  const sent = new Float64Array(n), recv = new Float64Array(n);
+  S.prep.edges.forEach((e) => { sent[e.from] += e.amount; recv[e.to] += e.amount; });
+  const flagged = [];
+  for (let v = 0; v < n; v++) if (r.hits[v] > 0) flagged.push(v);
+  flagged.sort((a, b) => r.risk[b] - r.risk[a] || r.hits[b] - r.hits[a] || nm[a].localeCompare(nm[b]));
+  $("acctNote").textContent = flagged.length
+    ? `${flagged.length} of ${n} accounts appear in at least one loop. The rest are cleared.`
+    : `None of the ${n} accounts appears in a loop under the current settings.`;
+  $("acctBody").innerHTML = flagged.map((v) => {
+    const lv = level(r.risk[v]);
+    return `<tr><td>${esc(nm[v])}</td><td><span class="pill ${lv}">${levelName[lv]} <span class="num">${r.risk[v]}</span></span></td><td class="num">${r.hits[v]}</td><td class="num">${r.sccSize[r.sccOf[v]]}</td><td class="num">${rupees(sent[v])}</td><td class="num">${rupees(recv[v])}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" style="color:var(--ink-3)">No flagged accounts.</td></tr>`;
+}
+
+/* ---------------- transactions ---------------- */
+function renderTransactions() {
+  const inLoop = new Set();
+  S.res.cycles.forEach((c) => c.edges.forEach((e) => inLoop.add(S.prep.rowOf[e])));
+  $("txBody").innerHTML = S.rows.map((r, i) =>
+    `<tr${inLoop.has(i) ? ' class="inloop"' : ""}><td class="num">${i + 1}</td><td>${esc(r.from)}</td><td>${esc(r.to)}</td><td class="num">${rupees(r.amount)}</td><td>${when(r.time)}</td><td><button type="button" class="x" data-del="${i}" aria-label="Remove transfer ${i + 1}">×</button></td></tr>`
+  ).join("");
+  $("acctList").innerHTML = S.prep.names.map((n) => `<option value="${esc(n)}"></option>`).join("");
+  if (document.activeElement !== $("csvBox")) $("csvBox").value = toCSV(S.rows);
+}
+function toCustom() {
+  S.ds = "custom";
+  document.querySelectorAll("#datasets button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.ds === "custom")));
+  $("reseed").hidden = true;
+}
+$("txBody").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-del]");
+  if (!b) return;
+  S.rows.splice(+b.dataset.del, 1);
+  toCustom(); analyze(true);
+});
+$("addForm").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const row = { from: $("fFrom").value.trim(), to: $("fTo").value.trim(), amount: parseFloat($("fAmt").value), time: parseFloat($("fTime").value) };
+  const st = $("addStatus");
+  if (!row.from || !row.to) { st.textContent = "Enter both account names."; st.className = "status err"; return; }
+  if (row.from === row.to) { st.textContent = "An account can't send money to itself here. Pick two different accounts."; st.className = "status err"; return; }
+  if (!(row.amount > 0) || !(row.time >= 0)) { st.textContent = "Amount must be above zero and hour must be 0 or more."; st.className = "status err"; return; }
+  S.rows.push(row);
+  toCustom(); analyze(true);
+  st.textContent = `Added ${row.from} → ${row.to}, ${rupees(row.amount)} at ${when(row.time)}.`; st.className = "status";
+  $("fAmt").value = ""; $("fTime").value = "";
+});
+function applyCsvText(text) {
+  const { rows, bad } = parseCSV(text), st = $("csvStatus");
+  if (!rows.length) { st.textContent = "No transfers found. Each line needs from,to,amount,time_hours."; st.className = "status err"; return; }
+  S.rows = rows; S.focus = -1;
+  toCustom(); analyze(true);
+  const skipped = bad + S.prep.skipped;
+  st.textContent = `Loaded ${rows.length - S.prep.skipped} transfers${skipped ? `, skipped ${skipped} line${skipped > 1 ? "s" : ""} that didn't parse` : ""}.`;
+  st.className = "status";
+}
+$("applyCsv").addEventListener("click", () => applyCsvText($("csvBox").value));
+$("csvFile").addEventListener("change", (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { $("csvBox").value = rd.result; applyCsvText(rd.result); };
+  rd.onerror = () => { $("csvStatus").textContent = "Couldn't read that file."; $("csvStatus").className = "status err"; };
+  rd.readAsText(f);
+  ev.target.value = "";
+});
+$("copyCsv").addEventListener("click", () => {
+  const ta = $("csvBox"), st = $("csvStatus");
+  const fallback = () => { ta.focus(); ta.select(); st.textContent = "Selected. Press Ctrl+C to copy."; };
+  if (navigator.clipboard) navigator.clipboard.writeText(ta.value).then(() => { st.textContent = "Copied CSV."; st.className = "status"; }, fallback); else fallback();
+});
+
+/* ---------------- how it works (live numbers) ---------------- */
+function renderHow() {
+  const r = S.res, n = S.prep.names.length, m = S.prep.edges.length;
+  let cleared = 0, multi = 0;
+  for (let v = 0; v < n; v++) if (r.sccSize[r.sccOf[v]] < 2) cleared++;
+  for (let s = 0; s < r.nSccs; s++) if (r.sccSize[s] > 1) multi++;
+  const top = r.cycles[0];
+  $("live1").textContent = `Current data: ${int(n)} accounts, ${int(m)} transfers, ${int(G.links.length)} distinct sender → receiver pairs.`;
+  $("live2").textContent = `${int(r.nSccs)} SCCs, ${multi} with 2+ accounts. ${int(cleared)} of ${int(n)} accounts cleared without any search.`;
+  $("live3").textContent = `${int(r.steps)} DFS steps, ${int(r.cycles.length)} loop${r.cycles.length === 1 ? "" : "s"} found, ${S.ms < 1 ? S.ms.toFixed(2) : S.ms.toFixed(1)} ms in the ${engine.name === "wasm" ? "WebAssembly" : "JavaScript"} engine.`;
+  $("live4").textContent = top ? `Riskiest loop scores ${top.score}/100 (${levelName[level(top.score)].toLowerCase()} risk), ${top.len} hops over ${hrs(top.span)}.` : "No loops to rank with the current settings.";
+}
+
+/* ---------------- source viewer ---------------- */
+const KW = new Set("int double long void char const static return if else for while do typedef struct unsigned break continue sizeof".split(" "));
+function highlightC(src) {
+  const re = /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(^[ \t]*#[^\n]*)|([A-Za-z_]\w*)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*\b)/gm;
+  let out = "", last = 0, m;
+  while ((m = re.exec(src))) {
+    out += esc(src.slice(last, m.index));
+    const t = esc(m[0]);
+    if (m[1]) out += `<span class="tk-c">${t}</span>`;
+    else if (m[2]) out += `<span class="tk-s">${t}</span>`;
+    else if (m[3]) out += `<span class="tk-p">${t}</span>`;
+    else if (m[4]) out += KW.has(m[0]) ? `<span class="tk-k">${t}</span>` : t;
+    else out += `<span class="tk-n">${t}</span>`;
+    last = re.lastIndex;
+  }
+  return out + esc(src.slice(last));
+}
+function renderSource() {
+  const files = Object.keys(SOURCES || {});
+  $("srcFiles").innerHTML = files.map((f) => `<button type="button" data-f="${f}" aria-pressed="${f === S.src}">${f}</button>`).join("");
+  $("srcCode").innerHTML = highlightC(SOURCES[S.src] || "");
+}
+$("srcFiles").addEventListener("click", (ev) => { const b = ev.target.closest("[data-f]"); if (b) { S.src = b.dataset.f; renderSource(); $("srcCode").scrollTop = 0; } });
+$("copySrc").addEventListener("click", (ev) => {
+  const btn = ev.currentTarget;
+  const done = (msg) => { btn.textContent = msg; setTimeout(() => (btn.textContent = "Copy file"), 1600); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents($("srcCode")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done("Selected"); };
+  if (navigator.clipboard) navigator.clipboard.writeText(SOURCES[S.src]).then(() => done("Copied"), select); else select();
+});
+
+/* ---------------- tabs ---------------- */
+const TABS = ["how", "accounts", "transactions", "source"];
+function openTab(name, scroll) {
+  TABS.forEach((t) => {
+    $("t-" + t).setAttribute("aria-selected", String(t === name));
+    $("p-" + t).hidden = t !== name;
+  });
+  if (scroll) $("lower").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+TABS.forEach((t) => $("t-" + t).addEventListener("click", () => openTab(t)));
+document.querySelector(".tabs").addEventListener("keydown", (ev) => {
+  const i = TABS.findIndex((t) => $("t-" + t).getAttribute("aria-selected") === "true");
+  if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+    const j = (i + (ev.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length;
+    openTab(TABS[j]); $("t-" + TABS[j]).focus();
+  }
+});
+
+/* ---------------- controls ---------------- */
+document.querySelectorAll("#datasets button").forEach((b) => b.addEventListener("click", () => {
+  if (b.dataset.ds === "custom") { toCustom(); openTab("transactions", true); $("csvBox").focus(); return; }
+  loadDataset(b.dataset.ds);
+}));
+$("reseed").addEventListener("click", () => { S.seed = (S.seed * 1103515245 + 12345) >>> 0; G.nodes = []; G.pos.clear(); loadDataset("synthetic"); });
+function syncParams() {
+  S.params.maxLen = +$("maxLen").value;
+  S.params.window = +$("window").value;
+  S.params.minAmount = Math.max(0, +$("minAmount").value || 0);
+  S.params.chrono = $("chrono").checked;
+  $("maxLenOut").textContent = S.params.maxLen;
+  $("windowOut").textContent = S.params.window + " h";
+  $("chronoText").textContent = S.params.chrono ? "Hops in time order" : "Any order";
+  analyze(false);
+}
+["maxLen", "window", "minAmount"].forEach((id) => $(id).addEventListener("input", syncParams));
+$("chrono").addEventListener("change", syncParams);
+$("hulls").addEventListener("change", (ev) => { S.showHulls = ev.target.checked; updateGraph(); });
+
+function renderAll() {
+  renderMetrics();
+  renderCases();
+  updateGraph();
+  renderAccounts();
+  renderTransactions();
+  renderHow();
+}
+
+renderSource();
+const hash = (location.hash || "").slice(1);
+if (TABS.includes(hash)) openTab(hash, false);
+loadDataset("sample");
+})();
+</script>

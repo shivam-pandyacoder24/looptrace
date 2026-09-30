@@ -1,0 +1,26 @@
+from,to,amount,time_hours
+# A bakery's payroll week. Money moves in small loops (staff buy coffee from
+# a cafe that buys bread from the bakery that pays the staff), but nothing
+# about it looks like laundering: the amounts shrink sharply at every hop.
+Riverside Bakery,Kavya Menon,25000,0
+Riverside Bakery,Imran Sheikh,25000,0
+Riverside Bakery,Deepa Rao,22000,0
+Riverside Bakery,Vikram Singh,22000,0
+Riverside Bakery,Ananya Das,18000,0
+Kavya Menon,Lakeview Homes,11000,5
+Imran Sheikh,Lakeview Homes,11000,6
+Deepa Rao,Lakeview Homes,9500,8
+Vikram Singh,Lakeview Homes,9500,9
+Ananya Das,Metro Transit,600,12
+Riverside Bakery,Golden Mills,14000,20
+Ananya Das,QuickMart,1650,26
+Kavya Menon,Corner Cafe,180,30
+Imran Sheikh,Corner Cafe,240,33
+Deepa Rao,QuickMart,2100,41
+Corner Cafe,Riverside Bakery,6000,50
+Vikram Singh,City Pharmacy,780,52
+Kavya Menon,Ananya Das,400,60
+QuickMart,Riverside Bakery,9000,70
+Golden Mills,Metro Transit,900,90
+Lakeview Homes,City Pharmacy,300,120
+Ananya Das,Kavya Menon,400,150
